@@ -21,7 +21,6 @@ class MainApp extends StatelessWidget {
       title: 'ESP32 Controller',
       theme: ThemeData(
         brightness: Brightness.dark,
-        //scaffoldBackgroundColor: Colors.black,
         primaryColor: Colors.blue,
         accentColor: Colors.blueAccent,
       ),
@@ -138,6 +137,31 @@ class _AppHomeScreenState extends State<AppHomeScreen> {
                   "Output",
                   textAlign: TextAlign.left,
                   style: headline,
+                ),
+                SizedBox(height: 10),
+                StreamBuilder<String>(
+                  initialData: "No Data arrived",
+                  stream: bluetooth.getStringStream(),
+                  builder: (context, snapshot) {
+                    // print(snapshot.data);
+                    return Text(snapshot.data);
+                  },
+                ),
+                StreamBuilder<bool>(
+                  initialData: false,
+                  stream: bluetooth.getBoolStream(),
+                  builder: (context, snapshot) {
+                    // print(snapshot.data);
+                    return Text(snapshot.data.toString());
+                  },
+                ),
+                StreamBuilder<int>(
+                  initialData: 0,
+                  stream: bluetooth.getIntStream(),
+                  builder: (context, snapshot) {
+                    // print(snapshot.data);
+                    return Text(snapshot.data.toString());
+                  },
                 ),
               ],
             ),

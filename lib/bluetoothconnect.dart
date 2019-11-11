@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_blue/flutter_blue.dart';
 
@@ -99,10 +101,13 @@ class BluetoothConnector {
   bool isConnected = false;
   bool isWriting = false;
 
+  String _lastSnackbar = "";
+
   List<MapEntry<String, List<int>>> msgStack = List();
   HashMap<String, BluetoothCharacteristic> map;
 
   sendInit() async {}
+  close() async {}
 
   BluetoothConnector() {
     settings.stream.listen((data) {
@@ -134,6 +139,7 @@ class BluetoothConnector {
     if (device != null) {
       showSnackbar(Icons.bluetooth_disabled, 'Disonnected from ${device.name}');
       device.disconnect();
+      close();
 
       map = null;
       device = null;
@@ -208,7 +214,18 @@ class BluetoothConnector {
       for (var service in services) {
         for (var c in service.characteristics) {
           map[c.uuid.toString()] = c;
-          print('${c.serviceUuid} ${c.uuid} found!');
+          bool read = c.properties.read;
+          bool write = c.properties.write;
+          bool notify = c.properties.notify;
+          bool indicate = c.properties.indicate;
+          String properties = "";
+          properties += (read ? "R" : "") + (write ? "W" : "");
+          properties += (notify ? "N" : "") + (indicate ? "I" : "");
+          print('${c.serviceUuid} ${c.uuid} [$properties] found!');
+
+          if (notify || indicate) {
+            await c.setNotifyValue(true);
+          }
         }
       }
 
@@ -216,9 +233,47 @@ class BluetoothConnector {
     }
   }
 
-  Future<List<int>> readService(String characteristicGuid) async {
+  subscribeService<T>(String characteristicGuid, StreamController<T> controller,
+      T Function(List<int>) parse) {
     if (map != null) {
       var characteristic = map[characteristicGuid];
+      if (characteristic != null) {
+        Stream<List<int>> listener = characteristic.value;
+
+        listener.listen((onData) {
+          if (!controller.isClosed) {
+            T value = parse(onData);
+            controller.sink.add(value);
+          }
+        });
+      }
+    }
+  }
+
+  subscribeServiceString(
+      String guid, StreamController<String> controller) async {
+    var parse = (List<int> data) => String.fromCharCodes(data);
+    subscribeService<String>(guid, controller, parse);
+  }
+
+  void subscribeServiceInt(String guid, StreamController<int> controller) {
+    var parse = (List<int> data) => bytesToInteger(data);
+    subscribeService<int>(guid, controller, parse);
+  }
+
+  void subscribeServiceBool(String guid, StreamController<bool> controller) {
+    var parse = (List<int> data) {
+      if (data.isNotEmpty) {
+        return data[0] != 0 ? true : false;
+      }
+      return false;
+    };
+    subscribeService<bool>(guid, controller, parse);
+  }
+
+  Future<List<int>> readService(String characteristicGuid) async {
+    if (map != null) {
+      BluetoothCharacteristic characteristic = map[characteristicGuid];
       print(map);
       if (characteristic != null) {
         return await characteristic.read();
@@ -276,17 +331,28 @@ class BluetoothConnector {
   }
 
   void showSnackbar(IconData icon, String msg) {
-    snackbar.openSnackbar(
-      SnackBar(
-        duration: Duration(seconds: 1),
-        content: Row(
-          children: <Widget>[
-            Icon(icon),
-            Text(msg),
-          ],
+    if (msg != _lastSnackbar) {
+      snackbar.openSnackbar(
+        SnackBar(
+          duration: Duration(seconds: 1),
+          content: Row(
+            children: <Widget>[
+              Icon(icon),
+              Text(msg),
+            ],
+          ),
         ),
-      ),
-      msg,
-    );
+        msg,
+      );
+    }
+    _lastSnackbar = msg;
+  }
+
+  int bytesToInteger(List<int> bytes) {
+    var value = 0;
+    for (var i = 0, length = bytes.length; i < length; i++) {
+      value += bytes[i] * pow(256, i);
+    }
+    return value;
   }
 }

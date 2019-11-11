@@ -1,25 +1,27 @@
 #include <BLEDevice.h>
 #include <BLEUtils.h>
 #include <BLEServer.h>
+#include <BLE2902.h>
 
 // https://www.uuidgenerator.net/
 
-#define BTNAME "ESP32"
+#define DEVICENAME "ESP32"
 
-#define CONTROLL       "1450dbb0-e48c-4495-ae90-5ff53327ede4"
-#define CONTROLL_EFFECT "ec693074-43fe-489d-b63b-94456f83beb5"
-#define CONTROLL_BRIGHTNESS "25e79015-4e97-44cd-9c5e-b539082666b0"
-#define CONTROLL_COLOR "45db5a06-5481-49ee-a8e9-10b411d73de7"
+#define SEND "f2f9a4de-ef95-4fe1-9c2e-ab5ef6f0d6e9"
+#define SEND_INT "e376bd46-0d9a-44ab-bb71-c262d06f60c7"
+#define SEND_BOOL "5c409aab-50d4-42c2-bf57-430916e5eaf4"
+#define SEND_STRING "9e8fafe1-8966-4276-a3a3-d0b00269541e"
 
-#define MUSIC       "f2f9a4de-ef95-4fe1-9c2e-ab5ef6f0d6e9"
-#define MUSIC_LEFT  "e376bd46-0d9a-44ab-bb71-c262d06f60c7"
-#define MUSIC_RIGHT "b68f146c-e40c-4850-9d8b-ebbf513c8911"
+#define RECIVE "1450dbb0-e48c-4495-ae90-5ff53327ede4"
+#define RECIVE_INT "ec693074-43fe-489d-b63b-94456f83beb5"
+#define RECIVE_BOOL "45db5a06-5481-49ee-a8e9-10b411d73de7"
+#define RECIVE_STRING "9393c756-78ea-4629-a53e-52fb10f9a63f"
 
-int effect = 0;
-int brightness = 100;
-int color = 0;
-double ampLeft = 0;
-double ampRight = 0;
+bool deviceConnected = false;
+
+String strToString(std::string str) {
+  return str.c_str();
+}
 
 int strToInt(std::string str) {
   const char* encoded = str.c_str();
@@ -30,84 +32,112 @@ double intToDouble(int value, double max) {
   return (1.0 * value) / max;
 }
 
-class WriteEffect: public BLECharacteristicCallbacks {
-    void onWrite(BLECharacteristic *pCharacteristic) {
-      effect = strToInt(pCharacteristic->getValue());
-      Serial.print("Effect:");
-      Serial.println(effect);
+bool intToBool(int value) {
+  if (value == 0) {
+    return false;
+  }
+  return true;
+}
+
+class ConnectionServerCallbacks: public BLEServerCallbacks {
+    void onConnect(BLEServer* pServer) {
+      deviceConnected = true;
+      Serial.println("Connected");
+    };
+
+    void onDisconnect(BLEServer* pServer) {
+      deviceConnected = false;
+      Serial.println("Disconnected");
     }
 };
 
-class WriteColor: public BLECharacteristicCallbacks {
+class WriteString: public BLECharacteristicCallbacks {
     void onWrite(BLECharacteristic *pCharacteristic) {
-      color = strToInt(pCharacteristic->getValue());
-      Serial.print("Color:");
-      Serial.println(color);
+      String str = strToString(pCharacteristic->getValue());
+      Serial.print("Recived String:");
+      Serial.println(str);
     }
 };
 
-class WriteBrightness: public BLECharacteristicCallbacks {
+class WriteInt: public BLECharacteristicCallbacks {
     void onWrite(BLECharacteristic *pCharacteristic) {
-      brightness = strToInt(pCharacteristic->getValue());
-      Serial.print("Brightness:");
-      Serial.println(brightness);
+      int rint = strToInt(pCharacteristic->getValue());
+      Serial.print("Recived Int:");
+      Serial.println(rint);
     }
 };
 
-class WriteMusicLeft: public BLECharacteristicCallbacks {
+class WriteBool: public BLECharacteristicCallbacks {
     void onWrite(BLECharacteristic *pCharacteristic) {
-      ampLeft = 100 * intToDouble(strToInt(pCharacteristic->getValue()), 10000.0);
-      Serial.print("AmpLeft:");
-      Serial.println(ampLeft);
+      bool rbool = intToBool(strToInt(pCharacteristic->getValue()));
+      Serial.print("Recived Bool:");
+      Serial.println(rbool ? "ON" : "OFF");
     }
 };
 
-class WriteMusicRight: public BLECharacteristicCallbacks {
-    void onWrite(BLECharacteristic *pCharacteristic) {
-      ampRight = 100 * intToDouble(strToInt(pCharacteristic->getValue()), 10000.0);
-      Serial.print("AmpRight:");
-      Serial.println(ampRight);
-    }
-};
+BLECharacteristic *sSendInt;
+BLECharacteristic *sSendBool;
+BLECharacteristic *sSendString;
 
 void setup() {
   Serial.begin(115200);
-  Serial.print("Device Name: ESP32");
-  
-  BLEDevice::init("ESP32");
+  Serial.print("Device Name:");
+  Serial.println(DEVICENAME);
+
+  BLEDevice::init(DEVICENAME);
   BLEServer *btServer = BLEDevice::createServer();
-  BLEService *sControll = btServer->createService(CONTROLL);
+  btServer->setCallbacks(new ConnectionServerCallbacks());
 
-  BLECharacteristic *cControllEffect = sControll->createCharacteristic(CONTROLL_EFFECT, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE);
-  cControllEffect->setCallbacks(new WriteEffect());
-  cControllEffect->setValue("1");
+  BLEService *sRecive = btServer->createService(RECIVE);
+  uint32_t cwrite = BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE;
 
-  BLECharacteristic *cControllColor = sControll->createCharacteristic(CONTROLL_COLOR, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE);
-  cControllColor->setCallbacks(new WriteColor());
-  cControllColor->setValue("1");
+  BLECharacteristic *sReciveInt = sRecive->createCharacteristic(RECIVE_INT, cwrite);
+  sReciveInt->setCallbacks(new WriteInt());
 
-  BLECharacteristic *cControllBrightness = sControll->createCharacteristic(CONTROLL_BRIGHTNESS, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE);
-  cControllBrightness->setCallbacks(new WriteBrightness());
-  cControllBrightness->setValue("1");
+  BLECharacteristic *sReciveBool = sRecive->createCharacteristic(RECIVE_BOOL, cwrite);
+  sReciveBool->setCallbacks(new WriteBool());
+
+  BLECharacteristic *sReciveString = sRecive->createCharacteristic(RECIVE_STRING, cwrite);
+  sReciveString->setCallbacks(new WriteString());
 
 
-  BLEService *sMusic = btServer->createService(MUSIC);
-  BLECharacteristic *cMusicLeft = sMusic->createCharacteristic(MUSIC_LEFT, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE);
-  cMusicLeft->setCallbacks(new WriteMusicLeft());
-  cMusicLeft->setValue("0.5");
+  BLEService *sSend = btServer->createService(SEND);
+  uint32_t cnotify = BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE  |
+                     BLECharacteristic::PROPERTY_NOTIFY | BLECharacteristic::PROPERTY_INDICATE;
 
-  BLECharacteristic *cMusicRight = sMusic->createCharacteristic(MUSIC_RIGHT, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE);
-  cMusicRight->setCallbacks(new WriteMusicRight());
-  cMusicRight->setValue("0.5");
+  sSendInt = sSend->createCharacteristic(SEND_INT, cnotify);
+  sSendInt->addDescriptor(new BLE2902());
+  sSendInt->setValue("9000");
 
-  sControll->start();
-  sMusic->start();
+  sSendBool = sSend->createCharacteristic(SEND_BOOL, cnotify);
+  sSendBool->addDescriptor(new BLE2902());
+  sSendBool->setValue("0");
+
+  sSendString = sSend->createCharacteristic(SEND_STRING, cnotify);
+  sSendString->addDescriptor(new BLE2902());
+  sSendString->setValue("Hi");
+
+  sRecive->start();
+  sSend->start();
 
   BLEAdvertising *pAdvertising = btServer->getAdvertising();
   pAdvertising->start();
 }
 
+uint32_t value = 0;
 void loop() {
-  // Codo
-  delay(2000);
+  delay(1000);
+  if (deviceConnected) {
+    sSendInt->setValue((uint8_t*)&value, 4);
+    sSendInt->notify();
+
+    uint8_t vbool = (value % 2 == 0) ? 1 : 0;
+    sSendBool->setValue((uint8_t*)&vbool, 1);
+    sSendBool->notify();
+
+    sSendString->setValue("0x4d");
+    sSendString->notify();
+
+    value++;
+  }
 }

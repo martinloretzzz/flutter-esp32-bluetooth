@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import './bluetoothconnect.dart';
 
 class RECIVE {
@@ -16,14 +18,28 @@ class SEND {
 
 class BluetoothController extends BluetoothConnector {
   double _sliderValue = 0;
-  String _textfieldValue = "";
+  String _textfieldValue = "Hi";
   bool _buttonState = false;
+
+  var _textStream = StreamController<String>();
+  var _numberStream = StreamController<int>();
+  var _boolStream = StreamController<bool>();
 
   @override
   sendInit() async {
     await sendSliderValue(_sliderValue);
     await sendTextFieldValue(_textfieldValue);
     await sendButtonPressed(_buttonState);
+    subscribeServiceString(RECIVE.STRING, _textStream);
+    subscribeServiceInt(RECIVE.INT, _numberStream);
+    subscribeServiceBool(RECIVE.BOOL, _boolStream);
+  }
+
+  @override
+  close() async {
+    //_textStream.close();
+    //_numberStream.close();
+    //_boolStream.close();
   }
 
   BluetoothController() : super();
@@ -42,5 +58,17 @@ class BluetoothController extends BluetoothConnector {
   sendButtonPressed(bool state) async {
     _buttonState = state;
     await writeServiceBool(SEND.BOOL, state, true);
+  }
+
+  Stream<String> getStringStream() {
+    return _textStream.stream;
+  }
+
+  Stream<int> getIntStream() {
+    return _numberStream.stream;
+  }
+
+  Stream<bool> getBoolStream() {
+    return _boolStream.stream;
   }
 }
